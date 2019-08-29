@@ -157,3 +157,101 @@ If we add `app.use(handler)` below the line where we initalized the `app`, then 
 The first two routes require a post body with an email and password.  All of the above routes (if valid requests are given) respond with a `token` and `user` data.
 
 With the above set up, if we make a request to `http://localhost:3001/auth/verify`, we'll get a `401` response with the error message *no token provided*.
+
+We can effectively treat this as not being logged in.
+
+#### Simulating an Auth Workflow
+
+Using some HTTP client, e.g., `axios`, `fetch`, `insomnia`, `cURL`, etc, make a `POST` request to `http://localhost:3001/auth/register` with a POST body containing a new email and password.
+
+The resulting json response should look something like this:
+
+```json
+{
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NSwiZW1haWwiOiJib2JieUBnbWFpbC5jb20iLCJwYXNzd29yZF9kaWdlc3QiOiIkMmIkMDgkOEtVb3J6aGV0cnNSS3B6Zk84dC55Lk1SUzlhM2N0Z2xZT3diNmJsYnpXaEpyaUhmbUhJWjIiLCJ1cGRhdGVkQXQiOiIyMDE5LTA4LTI5VDE1OjM3OjMxLjM3MloiLCJjcmVhdGVkQXQiOiIyMDE5LTA4LTI5VDE1OjM3OjMxLjM3MloiLCJpYXQiOjE1NjcwOTMwNTF9.aKbmkx1_MA956Z0OOcWHXgPrVbuNPKBQTtgGvvmiZ1I",
+    "user": {
+        "createdAt": "2019-08-29T15:37:31.372Z",
+        "email": "bobby@gmail.com",
+        "id": 5,
+        "updatedAt": "2019-08-29T15:37:31.372Z"
+    }
+}
+```
+
+If you make a request with the same username but a different password to `http://localhost:3001/auth/login`, you should get a 401 with an `Invalid Credentials` error message.
+
+If another request is made with the correct email/password credentials, then the same response is given as above:
+
+```json
+{
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJib2JieUBnbWFpbC5jb20iLCJwYXNzd29yZF9kaWdlc3QiOiIkMmIkMDgkbU9ERzZTWnEzdmpLRmp6bk1xdy5MZXJkdHNoaDBEdjlWb0lkeEJ6Y0hrbnJJaHRiMkNPOHEiLCJjcmVhdGVkQXQiOiIyMDE5LTA4LTI5VDE1OjM2OjI5LjEzMFoiLCJ1cGRhdGVkQXQiOiIyMDE5LTA4LTI5VDE1OjM2OjI5LjEzMFoiLCJpYXQiOjE1NjcwOTMyNTZ9.SDdXgLh7EeH5a42mcytq2_D47huDnhjmKABCraoKOfA",
+    "user": {
+        "createdAt": "2019-08-29T15:36:29.130Z",
+        "email": "bobby@gmail.com",
+        "id": 1,
+        "updatedAt": "2019-08-29T15:36:29.130Z"
+    }
+}
+```
+
+### Verifying
+
+Lastly, we can manually insert the `token` provided in these first two responses into an `Authorization` header to make "authenticated" requests to the server.
+
+Recall that if we simply make a request to `/auth/verify` the server responds with a `401`.
+
+On the other hand, if we correctly attach the token to the request, the server will respond with a success status code.
+
+We can do that by adding the following header:
+```
+Authorization: Bearer <token>
+```
+
+Note that the braces are not necessary `< >`; they simply denote that the value inside should be the value of a token and not the string "token".
+
+Here is an example header using the token from above:
+
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJib2JieUBnbWFpbC5jb20iLCJwYXNzd29yZF9kaWdlc3QiOiIkMmIkMDgkbU9ERzZTWnEzdmpLRmp6bk1xdy5MZXJkdHNoaDBEdjlWb0lkeEJ6Y0hrbnJJaHRiMkNPOHEiLCJjcmVhdGVkQXQiOiIyMDE5LTA4LTI5VDE1OjM2OjI5LjEzMFoiLCJ1cGRhdGVkQXQiOiIyMDE5LTA4LTI5VDE1OjM2OjI5LjEzMFoiLCJpYXQiOjE1NjcwOTMyNTZ9.SDdXgLh7EeH5a42mcytq2_D47huDnhjmKABCraoKOfA
+```
+
+If the `verify` is successful, the server will respond with a user object as above.
+
+If you get a `200` status code from `GET /auth/verify`, then you have successfully completed an auth workflow!  Yay!
+
+The next step is "protecting" custom routes with a `restrict` middleware.  `restrict` performs a similar role to `GET /auth/verify`, with the caveat that restrict performs the same action on routes we write ourselves rather than just on the one `/auth/verify/` route.
+
+### A Secret!
+
+Let's add a `/secret` route with the answer to life.
+
+*Hint*: It's 42.
+
+We can define a route like normal, but insert a `restrict` in between the path and route handler:
+
+```js
+app.get('/secret', restrict, (req, res) => {
+  res.json("The answer is 42");
+});
+```
+
+Try dispatching a request to this route, viz., `GET http://localhost:3001/secret`
+
+Without a token, the server will respond with a `401` status code and error message of `Invalid Token`.
+
+If a token is attached to the request as an authorization header, then `restrict` will permit the request to proceed to the request handler and the request will successfully complete.
+
+Let's do one more where we return _just the email of the current user_.
+
+Let's define another route, `GET /userinfo`.  This time, we will access `res.locals`.  This is an object where information can be shared _across middleware functions.
+
+```js
+app.get('/userinfo', restrict, (req, res) => {
+  const email = res.locals.user.email;
+  res.json({ email: email });
+});
+```
+
+Take note: you can only access the `user` object on `res.locals` on routes that include the `restrict` middleware function between the path and the route handler function.
+
+Also, since `restrict` only permits requests through that have a valid token, if a valid token is not passed as an authentication bearer token, the server will respond with a `401 Invalid Token`.
